@@ -1,0 +1,81 @@
+---
+title: "智能车网络配置"
+description: "介绍通过 nmcli 调整网络优先级，实现优先连接已知 Wi-Fi、自动回落至自建热点的智能切换方案，并包含热点稳态增强配置，无需网线即可灵活调试。"
+date: "2025-12-23"
+---
+
+>  降低自开启热点的优先级，提高已连接Wifi的优先级。这使得在无已知网络时，使用自开启热点连接，而在有已知网络时，默认使用已知网络。以往做法是，固定一个有线网络配置，使用网线直连方式登录终端连接新的WiFi，但这需要常备一根网线，较为不方便。
+
+## 操作步骤
+
+### ① 提高已知 Wi-Fi 的优先级
+
+```bash
+nmcli connection modify CT5G \
+  connection.autoconnect yes \
+  connection.autoconnect-priority 5  # 设置优先级5（数值越大优先级越高）
+```
+
+------
+
+### ② 降低自开启热点的优先级
+
+```bash
+nmcli connection modify Hotspot \
+  connection.autoconnect yes \
+  connection.autoconnect-priority 3  # 设置优先级3
+```
+
+------
+
+### ③关闭有线干扰
+
+如果暂时不用网线：
+
+```bash
+nmcli connection modify "Wired connection 1" connection.autoconnect no
+```
+
+## 补充一个“稳态增强”
+
+防止 Jetson 在 Wi-Fi 边缘来回切换 AP ↔ 客户端：
+
+```
+nmcli connection modify Hotspot connection.autoconnect-retries 0
+```
+
+### 含义是什么？
+
+- `autoconnect-retries`：
+   **自动连接失败后，最多重试多少次**
+- `0` = **无限次重试**（NetworkManager 定义）
+
+⚠️ 看起来像是“更激进”，但在 **AP 模式（Hotspot）** 下，它的效果是：
+
+> **一旦 Hotspot 被选中并启动，就会“稳定维持”，
+>  而不是被频繁放弃去试探不稳定的已知 Wi-Fi**
+
+## 稳态增强前 vs 后（对比理解）
+
+### ❌ 没有稳态增强
+
+- CT5G 信号弱
+- 系统不断：
+  - 关 AP → 试 Wi-Fi → 失败 → 开 AP
+- 表现：
+  - 热点频繁消失
+  - 终端连不上
+
+------
+
+### ✅ 启用稳态增强
+
+- CT5G 信号弱
+- 系统行为：
+  - **已进入 AP 模式 → 稳定维持**
+  - 不轻易打断你当前的“救援通道”
+
+结果：
+
+- 热点稳定存在
+- 你可以从容登录配置 Wi-Fi
